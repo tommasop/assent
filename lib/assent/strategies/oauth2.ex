@@ -98,10 +98,13 @@ defmodule Assent.Strategy.OAuth2 do
          {:ok, base_url} <- Config.__base_url__(config),
          {:ok, client_id} <- Config.fetch(config, :client_id) do
       params = authorization_params(config, client_id, redirect_uri)
+      session_params = session_params(params[:state], params[:code_verifier])
+      params = Keyword.delete(params, :code_verifier)
+
       authorize_url = Config.get(config, :authorize_url, "/oauth/authorize")
       url = Helpers.to_url(base_url, authorize_url, params)
 
-      {:ok, %{url: url, session_params: %{state: params[:state]}}}
+      {:ok, %{url: url, session_params: session_params}}
     end
   end
 
@@ -114,9 +117,13 @@ defmodule Assent.Strategy.OAuth2 do
       state: gen_state(),
       redirect_uri: redirect_uri
     ]
+    |> prepend_if(Config.get(config, :pkce_enabled, false), gen_pkce_verifier_and_challenge())
     |> Keyword.merge(params)
     |> List.keysort(0)
   end
+
+  defp session_params(state, code_verifier) when is_nil(code_verifier), do: %{state: state}
+  defp session_params(state, code_verifier), do: %{state: state, code_verifier: code_verifier}
 
   defp gen_state do
     24
@@ -124,6 +131,12 @@ defmodule Assent.Strategy.OAuth2 do
     |> :erlang.bitstring_to_list()
     |> Enum.map_join(fn x -> :erlang.integer_to_binary(x, 16) end)
     |> String.downcase()
+  end
+
+  defp gen_pkce_verifier_and_challenge do
+    code_verifier = 96 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+    code_challenge = :crypto.hash(:sha256, code_verifier) |> Base.url_encode64(padding: false)
+    [code_verifier: code_verifier, code_challenge: code_challenge, code_challenge_method: "S256"]
   end
 
   @doc """
@@ -148,6 +161,7 @@ defmodule Assent.Strategy.OAuth2 do
          {:ok, code} <- fetch_code_param(params),
          {:ok, redirect_uri} <- Config.fetch(config, :redirect_uri),
          :ok <- maybe_check_state(session_params, params),
+         :ok <- maybe_check_code_verifier(session_params, params),
          {:ok, token} <-
            grant_access_token(
              config,
@@ -186,6 +200,19 @@ defmodule Assent.Strategy.OAuth2 do
   end
 
   defp maybe_check_state(_session_params, _params), do: :ok
+
+  defp maybe_check_code_verifier(%{code_verifier: stored_code_verifier}, %{"code_verifier" => provided_code_verifier}) do
+    case stored_code_verifier == provided_code_verifier do
+      true -> :ok
+      false -> {:error, CallbackCSRFError.exception(key: "code_verifier")}
+    end
+  end
+
+  defp maybe_check_code_verifier(%{code_verifier: _code_verifier}, params) do
+    {:error, MissingParamError.exception(expected_key: "code_verifier", params: params)}
+  end
+
+  defp maybe_check_code_verifier(_session_params, _params), do: :ok
 
   defp authentication_params(nil, config) do
     with {:ok, client_id} <- Config.fetch(config, :client_id) do
@@ -404,4 +431,8 @@ defmodule Assent.Strategy.OAuth2 do
     do: {:error, RequestError.exception(message: "Unauthorized token", response: response)}
 
   defp process_user_response(any), do: process_response(any)
+
+  defp prepend_if(list, condition, item) do
+    if condition, do: item ++ list, else: list
+  end
 end

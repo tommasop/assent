@@ -32,6 +32,7 @@ Multi-provider authentication framework.
   * Stripe Connect - `Assent.Strategy.Stripe`
   * Twitter - `Assent.Strategy.Twitter`
   * VK - `Assent.Strategy.VK`
+  * Zitadel - `Assent.Strategy.Zitadel`
 
 ## Installation
 

@@ -212,15 +212,6 @@ defmodule Assent.Strategy.OAuth2 do
     end
   end
 
-  defp maybe_add_code_verifier(body, config) do
-    with {:ok, code_verifier} <- Config.fetch(config, :code_verifier) do
-      body ++ [code_verifier: code_verifier]
-    else
-      _ ->
-        body
-    end
-  end
-
   defp authentication_params(:client_secret_basic, config) do
     with {:ok, client_id} <- Config.fetch(config, :client_id),
          {:ok, client_secret} <- Config.fetch(config, :client_secret) do
@@ -261,6 +252,15 @@ defmodule Assent.Strategy.OAuth2 do
 
   defp authentication_params(method, _config) do
     {:error, "Invalid `:auth_method` #{method}"}
+  end
+
+  defp maybe_add_code_verifier(body, config) do
+    with {:ok, code_verifier} <- Config.fetch(config, :code_verifier) do
+      body ++ [code_verifier: code_verifier]
+    else
+      _ ->
+        body
+    end
   end
 
   defp jwt_authentication_params(alg, secret, config) do

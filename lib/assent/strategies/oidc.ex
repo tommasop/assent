@@ -246,6 +246,7 @@ defmodule Assent.Strategy.OIDC do
   defp to_client_auth_method("client_secret_post"), do: {:ok, :client_secret_post}
   defp to_client_auth_method("client_secret_jwt"), do: {:ok, :client_secret_jwt}
   defp to_client_auth_method("private_key_jwt"), do: {:ok, :private_key_jwt}
+  defp to_client_auth_method("none"), do: {:ok, nil}
 
   defp to_client_auth_method(method),
     do: {:error, "Invalid client authentication method: #{method}"}

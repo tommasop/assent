@@ -161,7 +161,6 @@ defmodule Assent.Strategy.OAuth2 do
          {:ok, code} <- fetch_code_param(params),
          {:ok, redirect_uri} <- Config.fetch(config, :redirect_uri),
          :ok <- maybe_check_state(session_params, params),
-         :ok <- maybe_check_code_verifier(session_params, params),
          {:ok, token} <-
            grant_access_token(
              config,
@@ -201,25 +200,24 @@ defmodule Assent.Strategy.OAuth2 do
 
   defp maybe_check_state(_session_params, _params), do: :ok
 
-  defp maybe_check_code_verifier(%{code_verifier: stored_code_verifier}, %{"code_verifier" => provided_code_verifier}) do
-    case stored_code_verifier == provided_code_verifier do
-      true -> :ok
-      false -> {:error, CallbackCSRFError.exception(key: "code_verifier")}
-    end
-  end
-
-  defp maybe_check_code_verifier(%{code_verifier: _code_verifier}, params) do
-    {:error, MissingParamError.exception(expected_key: "code_verifier", params: params)}
-  end
-
-  defp maybe_check_code_verifier(_session_params, _params), do: :ok
-
   defp authentication_params(nil, config) do
     with {:ok, client_id} <- Config.fetch(config, :client_id) do
       headers = []
-      body = [client_id: client_id]
+
+      body =
+        [client_id: client_id]
+        |> maybe_add_code_verifier(config)
 
       {:ok, headers, body}
+    end
+  end
+
+  defp maybe_add_code_verifier(body, config) do
+    with {:ok, code_verifier} <- Config.fetch(config, :code_verifier) do
+      body ++ [code_verifier: code_verifier]
+    else
+      _ ->
+        body
     end
   end
 
